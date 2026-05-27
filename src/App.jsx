@@ -243,7 +243,7 @@ export default function Dashboard() {
 
         {/* ── TABS ── */}
         <div style={{ display:"flex", gap:3, marginBottom:18, background:"rgba(255,255,255,0.04)", borderRadius:12, padding:3 }}>
-          {[["overview","Overview"],["strategy","Best Card"],["cycles","Cycles & Dues"],["transactions","Transactions"]].map(([id,label]) => (
+          {[["overview","Overview"],["strategy","Best Card"],["cycles","Cycles & Dues"],["breakdown","Breakdown"],["transactions","Transactions"]].map(([id,label]) => (
             <button key={id} onClick={() => setActiveTab(id)} style={{
               flex:1, padding:"7px 0", borderRadius:9, fontSize:12, fontWeight:500, cursor:"pointer",
               background: activeTab===id ? "rgba(255,255,255,0.1)" : "transparent",
@@ -456,6 +456,94 @@ export default function Dashboard() {
             )}
           </div>
         )}
+
+        {/* ── BREAKDOWN TAB ── */}
+        {activeTab === "breakdown" && (() => {
+          const catTotals = {};
+          const catCards  = {};
+          for (const [cat] of CATEGORIES) { catTotals[cat] = 0; catCards[cat] = {}; }
+
+          for (const f of FIXED_EXPENSES) {
+            const cat = f.category || "Other";
+            catTotals[cat] = (catTotals[cat] || 0) + f.amount;
+            catCards[cat]  = catCards[cat] || {};
+            catCards[cat][f.card] = (catCards[cat][f.card] || 0) + f.amount;
+          }
+
+          for (const e of expenses) {
+            const cycle = getCycleForCard(e.card, now);
+            if (!isInCycle(e.date, cycle.cycleStart, cycle.cycleEnd)) continue;
+            const cat = e.category || "Other";
+            const amt = parseFloat(e.amount) || 0;
+            catTotals[cat] = (catTotals[cat] || 0) + amt;
+            catCards[cat]  = catCards[cat] || {};
+            catCards[cat][e.card] = (catCards[cat][e.card] || 0) + amt;
+          }
+
+          const grandTotal = Object.values(catTotals).reduce((s, v) => s + v, 0);
+          const sorted = CATEGORIES.map(([cat, emoji]) => ({ cat, emoji, total: catTotals[cat] || 0, cards: catCards[cat] || {} }))
+            .filter(c => c.total > 0).sort((a, b) => b.total - a.total);
+          const maxVal = sorted[0]?.total || 1;
+
+          return (
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              <div style={{ fontSize:12, color:"#444", marginBottom:4 }}>All spend within current billing cycles, grouped by category:</div>
+
+              <div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:20, padding:"16px 18px", marginBottom:4 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
+                  {sorted.slice(0,6).map(({ cat, emoji, total }) => (
+                    <div key={cat} style={{ textAlign:"center", padding:"10px 6px", background:"rgba(255,255,255,0.03)", borderRadius:12 }}>
+                      <div style={{ fontSize:20, marginBottom:4 }}>{emoji}</div>
+                      <div style={{ fontSize:13, fontWeight:600 }}>${total.toFixed(0)}</div>
+                      <div style={{ fontSize:10, color:"#555", marginTop:2 }}>{grandTotal > 0 ? ((total/grandTotal)*100).toFixed(0) : 0}%</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {sorted.map(({ cat, emoji, total, cards }) => {
+                const pct = grandTotal > 0 ? (total / grandTotal) * 100 : 0;
+                const barPct = (total / maxVal) * 100;
+                return (
+                  <div key={cat} style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:16, padding:"14px 16px" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <span style={{ fontSize:18 }}>{emoji}</span>
+                        <span style={{ fontSize:14, fontWeight:500 }}>{cat}</span>
+                      </div>
+                      <div style={{ textAlign:"right" }}>
+                        <span style={{ fontSize:14, fontWeight:700 }}>${total.toFixed(2)}</span>
+                        <span style={{ fontSize:11, color:"#555", marginLeft:6 }}>{pct.toFixed(1)}%</span>
+                      </div>
+                    </div>
+                    <div style={{ height:6, background:"rgba(255,255,255,0.05)", borderRadius:99, marginBottom:8, overflow:"hidden" }}>
+                      <div style={{ height:"100%", width:`${barPct}%`, background:"linear-gradient(90deg,#3B82F6,#22C55E)", borderRadius:99, transition:"width 0.6s" }} />
+                    </div>
+                    <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                      {Object.entries(cards).map(([card, amt]) => {
+                        const def = CARDS[card];
+                        return (
+                          <span key={card} style={{ fontSize:11, padding:"2px 9px", borderRadius:99, background: def ? def.accentDim : "rgba(255,255,255,0.05)", color: def ? def.accent : "#666", border:`1px solid ${def ? def.accentBorder : "rgba(255,255,255,0.1)"}` }}>
+                            {card.split(" ")[0]} ${amt.toFixed(0)}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {sorted.length === 0 && (
+                <div style={{ textAlign:"center", padding:"30px 0", color:"#444", fontSize:13 }}>No spending data yet for this cycle.</div>
+              )}
+
+              <div style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:14, padding:"13px 16px", display:"flex", justifyContent:"space-between", marginTop:4 }}>
+                <span style={{ fontSize:14, fontWeight:500 }}>Total this cycle</span>
+                <span style={{ fontSize:14, fontWeight:700 }}>${grandTotal.toFixed(2)}</span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       <div style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:10, background:"linear-gradient(to top, #080810 60%, transparent)", padding:"16px", textAlign:"center", fontSize:11, color:"#2a2a3a" }}>
