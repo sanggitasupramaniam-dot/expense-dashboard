@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 // ─── CONFIG — your personal setup ────────────────────────────────────────────
-const SHEET_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyGOkmZ1vhmgMVO6KfvzuLd5l6Om2CTDA04zxfSSMu-JehF7651WKSlNNnh7GqkOfY/exec";
+const SHEET_WEBAPP_URL = "/api/proxy";
 
 const FIXED_EXPENSES = [
   { name: "Apple iCloud",         amount: 14.12, card: "UOB EVOL",          category: "Gym/Telco/Streaming" },
@@ -149,10 +149,7 @@ export default function Dashboard() {
   const fetchExpenses = useCallback(async () => {
     setRefreshing(true);
     try {
-      const res  = await fetch(`${SHEET_WEBAPP_URL}?action=read`, {
-        redirect: "follow",
-        mode: "cors",
-      });
+      const res  = await fetch(`/api/proxy`);
       const data = await res.json();
       setExpenses(data.rows || []);
     } catch {
