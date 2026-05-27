@@ -149,7 +149,10 @@ export default function Dashboard() {
   const fetchExpenses = useCallback(async () => {
     setRefreshing(true);
     try {
-      const res  = await fetch(`${SHEET_WEBAPP_URL}?action=read`);
+      const res  = await fetch(`${SHEET_WEBAPP_URL}?action=read`, {
+        redirect: "follow",
+        mode: "cors",
+      });
       const data = await res.json();
       setExpenses(data.rows || []);
     } catch {
