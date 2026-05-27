@@ -11,28 +11,33 @@ export default async function handler(req, res) {
     const data = await response.json();
 
     const normalised = (data.rows || []).map(row => {
-      // Fix date — strip timestamp
-      let date = row.date || "";
-      if (date && date.toString().includes("T")) {
-        date = date.toString().split("T")[0];
-      }
-      if (date instanceof Date || (typeof date === "number")) {
-        date = new Date(date).toISOString().split("T")[0];
+      // Fix date — always return YYYY-MM-DD string in SGT
+      let rawDate = row.date || "";
+      let date = "";
+      if (rawDate) {
+        const d = new Date(rawDate);
+        if (!isNaN(d)) {
+          // Add 8 hours for SGT to avoid date shifting
+          const sgt = new Date(d.getTime() + 8 * 60 * 60 * 1000);
+          date = sgt.toISOString().split("T")[0];
+        } else {
+          date = rawDate.toString().substring(0, 10);
+        }
       }
 
-      // Fix amount — try every possible key variation
-      const amount = parseFloat(
+      // Fix amount — force to number
+      const rawAmount =
         row["amount_(sgd)"] || row["amount_(SGD)"] ||
         row["amount_sgd"]   || row["amount"]       ||
-        row["Amount (SGD)"] || row["Amount"]       || 0
-      );
+        row["Amount (SGD)"] || row["Amount"]       || "0";
+      const amount = parseFloat(String(rawAmount).replace(/[^0-9.]/g, "")) || 0;
 
       return {
         date,
         amount,
-        category: row.category || row["category"] || "Other",
-        card:     row.card     || row["card"]     || "",
-        notes:    row.notes    || row["notes"]    || "",
+        category: String(row.category || row["category"] || "Other"),
+        card:     String(row.card     || row["card"]     || ""),
+        notes:    String(row.notes    || row["notes"]    || ""),
       };
     });
 
