@@ -10,14 +10,31 @@ export default async function handler(req, res) {
     const response = await fetch(`${SHEET_URL}?action=read`, { redirect: "follow" });
     const data = await response.json();
 
-    // Normalise rows so headers map correctly
-    const normalised = (data.rows || []).map(row => ({
-      date:     row.date     || row["date"]                || "",
-      amount:   row["amount_(sgd)"] || row.amount          || 0,
-      category: row.category                               || "Other",
-      card:     row.card                                   || "",
-      notes:    row.notes                                  || "",
-    }));
+    const normalised = (data.rows || []).map(row => {
+      // Fix date — strip timestamp
+      let date = row.date || "";
+      if (date && date.toString().includes("T")) {
+        date = date.toString().split("T")[0];
+      }
+      if (date instanceof Date || (typeof date === "number")) {
+        date = new Date(date).toISOString().split("T")[0];
+      }
+
+      // Fix amount — try every possible key variation
+      const amount = parseFloat(
+        row["amount_(sgd)"] || row["amount_(SGD)"] ||
+        row["amount_sgd"]   || row["amount"]       ||
+        row["Amount (SGD)"] || row["Amount"]       || 0
+      );
+
+      return {
+        date,
+        amount,
+        category: row.category || row["category"] || "Other",
+        card:     row.card     || row["card"]     || "",
+        notes:    row.notes    || row["notes"]    || "",
+      };
+    });
 
     return res.status(200).json({ rows: normalised });
   } catch (err) {
