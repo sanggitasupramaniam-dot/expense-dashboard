@@ -17,7 +17,6 @@ export default async function handler(req, res) {
       if (rawDate) {
         const d = new Date(rawDate);
         if (!isNaN(d)) {
-          // Add 8 hours for SGT to avoid date shifting
           const sgt = new Date(d.getTime() + 8 * 60 * 60 * 1000);
           date = sgt.toISOString().split("T")[0];
         } else {
@@ -32,9 +31,17 @@ export default async function handler(req, res) {
         row["Amount (SGD)"] || row["Amount"]       || "0";
       const amount = parseFloat(String(rawAmount).replace(/[^0-9.]/g, "")) || 0;
 
+      // Personal share — defaults to amount if not present (older rows / no split)
+      const rawShare =
+        row["personal_share_(sgd)"] || row["personal_share_sgd"] ||
+        row["personal_share"]       || row["Personal Share (SGD)"] || "";
+      const shareParsed = parseFloat(String(rawShare).replace(/[^0-9.]/g, ""));
+      const personalShare = isNaN(shareParsed) || shareParsed <= 0 ? amount : shareParsed;
+
       return {
         date,
         amount,
+        personalShare,
         category: String(row.category || row["category"] || "Other"),
         card:     String(row.card     || row["card"]     || ""),
         notes:    String(row.notes    || row["notes"]    || ""),
