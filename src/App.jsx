@@ -127,6 +127,8 @@ const CATEGORIES = [
   ["Transport","🚇"],["Gym/Telco/Streaming","📱"],["Other","💳"],
 ];
 
+const BREAKDOWN_CATEGORIES = [...CATEGORIES, ["Needs Review","❓"]];
+
 const SAMPLE_DATA = [
   { date: "2026-05-17", amount: "32",  category: "Grab/Gojek/Tada", card: "Citibank Cashback+", notes: "" },
   { date: "2026-05-17", amount: "18.50",category: "Dining",         card: "Maybank XL",         notes: "lunch" },
@@ -171,13 +173,14 @@ export default function Dashboard() {
   for (const cardName of Object.keys(CARDS)) {
     const cycle   = getCycleForCard(cardName, now);
     const def     = CARDS[cardName];
-    let total = 0, cashback = 0, items = [];
+    let cardSpend = 0, personalSpend = 0, cashback = 0, items = [];
 
-    // Fixed expenses (charged once per cycle)
+    // Fixed expenses (charged once per cycle, never split)
     for (const f of FIXED_EXPENSES) {
       if (f.card === cardName) {
-        total    += f.amount;
-        cashback += calcCashback(cardName, f.amount, f.category);
+        cardSpend     += f.amount;
+        personalSpend += f.amount;
+        cashback      += calcCashback(cardName, f.amount, f.category);
         items.push({ ...f, fixed: true });
       }
     }
@@ -185,21 +188,24 @@ export default function Dashboard() {
     for (const e of expenses) {
       if (e.card === cardName && isInCycle(e.date, cycle.cycleStart, cycle.cycleEnd)) {
         const amt = parseFloat(e.amount) || 0;
-        total    += amt;
-        cashback += calcCashback(cardName, amt, e.category);
+        const shareRaw = parseFloat(e.personalShare);
+        const share = isNaN(shareRaw) || shareRaw <= 0 ? amt : shareRaw;
+        cardSpend     += amt;       // what the bank charges (drives cashback & min-spend)
+        personalSpend += share;     // your actual share (drives budget totals)
+        cashback      += calcCashback(cardName, amt, e.category);
         items.push(e);
       }
     }
 
     const capReached  = def.cap && cashback >= def.cap;
-    const minMet      = !def.minSpend || total >= def.minSpend;
+    const minMet      = !def.minSpend || cardSpend >= def.minSpend;
     const cashbackPct = def.cap ? Math.min((cashback / def.cap) * 100, 100) : null;
-    const spendPct    = def.minSpend ? Math.min((total / def.minSpend) * 100, 100) : null;
+    const spendPct    = def.minSpend ? Math.min((cardSpend / def.minSpend) * 100, 100) : null;
 
-    cardData[cardName] = { ...cycle, total, cashback, items, capReached, minMet, cashbackPct, spendPct };
+    cardData[cardName] = { ...cycle, total: cardSpend, cardSpend, personalSpend, cashback, items, capReached, minMet, cashbackPct, spendPct };
   }
 
-  const totalSpend    = Object.values(cardData).reduce((s, c) => s + c.total, 0);
+  const totalSpend    = Object.values(cardData).reduce((s, c) => s + c.personalSpend, 0);
   const totalCashback = Object.values(cardData).reduce((s, c) => s + c.cashback, 0);
 
   const s = { // shared styles
@@ -288,8 +294,13 @@ export default function Dashboard() {
 
                   {/* Total spend */}
                   <div style={{ ...s.row, marginBottom:10 }}>
-                    <span style={{ fontSize:13, color:"#666" }}>Cycle spend</span>
-                    <span style={{ fontSize:13, fontWeight:600 }}>${data.total.toFixed(2)}</span>
+                    <span style={{ fontSize:13, color:"#666" }}>Cycle spend (your share)</span>
+                    <span style={{ fontSize:13, fontWeight:600 }}>
+                      ${data.personalSpend.toFixed(2)}
+                      {Math.abs(data.personalSpend - data.cardSpend) > 0.01 && (
+                        <span style={{ fontSize:11, color:"#555", fontWeight:400 }}> (${data.cardSpend.toFixed(2)} on card)</span>
+                      )}
+                    </span>
                   </div>
 
                   {/* Cashback cap bar */}
@@ -406,7 +417,7 @@ export default function Dashboard() {
                     </div>
                     <div style={{ marginTop:10, ...s.row }}>
                       <span style={{ fontSize:12, color:"#555" }}>Amount to pay (est.)</span>
-                      <span style={{ fontSize:13, fontWeight:600 }}>${data.total.toFixed(2)}</span>
+                      <span style={{ fontSize:13, fontWeight:600 }}>${data.cardSpend.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -440,16 +451,28 @@ export default function Dashboard() {
             ) : (
               [...expenses].reverse().map((e, i) => {
                 const def = CARDS[e.card];
+                const amt = parseFloat(e.amount) || 0;
+                const shareRaw = parseFloat(e.personalShare);
+                const share = isNaN(shareRaw) || shareRaw <= 0 ? amt : shareRaw;
+                const isSplit = Math.abs(share - amt) > 0.01;
+                const needsReview = e.category === "Needs Review";
                 return (
-                  <div key={i} style={{ ...s.row, background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:12, padding:"11px 14px" }}>
+                  <div key={i} style={{ ...s.row, background: needsReview ? "rgba(249,115,22,0.06)" : "rgba(255,255,255,0.02)", border: needsReview ? "1px solid rgba(249,115,22,0.25)" : "1px solid rgba(255,255,255,0.06)", borderRadius:12, padding:"11px 14px" }}>
                     <div>
                       <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                        <span style={{ fontSize:13, fontWeight:500 }}>{e.category || "Other"}</span>
+                        <span style={{ fontSize:13, fontWeight:500, color: needsReview ? "#F97316" : "#fff" }}>
+                          {needsReview ? "❓ Needs Review" : (e.category || "Other")}
+                        </span>
                         {def && <span style={{ fontSize:10, padding:"1px 7px", borderRadius:99, background:def.accentDim, color:def.accent }}>{e.card}</span>}
                       </div>
                       <div style={{ fontSize:11, color:"#444", marginTop:2 }}>{e.date}{e.notes ? ` · ${e.notes}` : ""}</div>
+                      {isSplit && (
+                        <div style={{ fontSize:11, color:"#F97316", marginTop:2 }}>Split · your share ${share.toFixed(2)} of ${amt.toFixed(2)}</div>
+                      )}
                     </div>
-                    <div style={{ fontSize:14, fontWeight:600 }}>${parseFloat(e.amount).toFixed(2)}</div>
+                    <div style={{ fontSize:14, fontWeight:600, textAlign:"right" }}>
+                      ${amt.toFixed(2)}
+                    </div>
                   </div>
                 );
               })
@@ -461,7 +484,7 @@ export default function Dashboard() {
         {activeTab === "breakdown" && (() => {
           const catTotals = {};
           const catCards  = {};
-          for (const [cat] of CATEGORIES) { catTotals[cat] = 0; catCards[cat] = {}; }
+          for (const [cat] of BREAKDOWN_CATEGORIES) { catTotals[cat] = 0; catCards[cat] = {}; }
 
           for (const f of FIXED_EXPENSES) {
             const cat = f.category || "Other";
@@ -475,13 +498,15 @@ export default function Dashboard() {
             if (!isInCycle(e.date, cycle.cycleStart, cycle.cycleEnd)) continue;
             const cat = e.category || "Other";
             const amt = parseFloat(e.amount) || 0;
-            catTotals[cat] = (catTotals[cat] || 0) + amt;
+            const shareRaw = parseFloat(e.personalShare);
+            const share = isNaN(shareRaw) || shareRaw <= 0 ? amt : shareRaw;
+            catTotals[cat] = (catTotals[cat] || 0) + share;
             catCards[cat]  = catCards[cat] || {};
-            catCards[cat][e.card] = (catCards[cat][e.card] || 0) + amt;
+            catCards[cat][e.card] = (catCards[cat][e.card] || 0) + share;
           }
 
           const grandTotal = Object.values(catTotals).reduce((s, v) => s + v, 0);
-          const sorted = CATEGORIES.map(([cat, emoji]) => ({ cat, emoji, total: catTotals[cat] || 0, cards: catCards[cat] || {} }))
+          const sorted = BREAKDOWN_CATEGORIES.map(([cat, emoji]) => ({ cat, emoji, total: catTotals[cat] || 0, cards: catCards[cat] || {} }))
             .filter(c => c.total > 0).sort((a, b) => b.total - a.total);
           const maxVal = sorted[0]?.total || 1;
 
