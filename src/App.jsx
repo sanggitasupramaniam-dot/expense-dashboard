@@ -49,8 +49,22 @@ const CARDS = {
 
 // ─── BILLING CYCLE HELPERS ───────────────────────────────────────────────────
 function getCycleForCard(cardName, referenceDate = new Date()) {
-  const { statementDay, dueDay } = CARDS[cardName];
   const ref = new Date(referenceDate);
+  const cardDef = CARDS[cardName];
+
+  // Unknown card (Cash, PayLah, ShopBack, Unspecified, etc.) — use calendar month
+  if (!cardDef) {
+    const cycleStart = new Date(ref.getFullYear(), ref.getMonth(), 1);
+    const cycleEnd   = new Date(ref.getFullYear(), ref.getMonth() + 1, 0);
+    const dueDate    = cycleEnd;
+    const totalDays  = Math.ceil((cycleEnd - cycleStart) / (1000 * 60 * 60 * 24)) + 1;
+    const daysLeft   = Math.ceil((cycleEnd - ref) / (1000 * 60 * 60 * 24));
+    const daysIn     = totalDays - daysLeft;
+    const progress   = Math.min(Math.max(daysIn / totalDays, 0), 1);
+    return { cycleStart, cycleEnd, dueDate, daysLeft, totalDays, daysIn, progress };
+  }
+
+  const { statementDay, dueDay } = cardDef;
   const day = ref.getDate();
   const month = ref.getMonth();
   const year = ref.getFullYear();
@@ -454,20 +468,21 @@ export default function Dashboard() {
                 const amt = parseFloat(e.amount) || 0;
                 const shareRaw = parseFloat(e.personalShare);
                 const share = isNaN(shareRaw) || shareRaw <= 0 ? amt : shareRaw;
-                const isSplit = Math.abs(share - amt) > 0.01;
+                const isSplit = e.splitLabel && e.splitLabel !== "Self";
                 const needsReview = e.category === "Needs Review";
                 return (
                   <div key={i} style={{ ...s.row, background: needsReview ? "rgba(249,115,22,0.06)" : "rgba(255,255,255,0.02)", border: needsReview ? "1px solid rgba(249,115,22,0.25)" : "1px solid rgba(255,255,255,0.06)", borderRadius:12, padding:"11px 14px" }}>
                     <div>
-                      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
                         <span style={{ fontSize:13, fontWeight:500, color: needsReview ? "#F97316" : "#fff" }}>
                           {needsReview ? "❓ Needs Review" : (e.category || "Other")}
                         </span>
                         {def && <span style={{ fontSize:10, padding:"1px 7px", borderRadius:99, background:def.accentDim, color:def.accent }}>{e.card}</span>}
+                        {isSplit && <span style={{ fontSize:10, padding:"1px 7px", borderRadius:99, background:"rgba(255,255,255,0.06)", color:"#aaa" }}>👥 {e.splitLabel}</span>}
                       </div>
                       <div style={{ fontSize:11, color:"#444", marginTop:2 }}>{e.date}{e.notes ? ` · ${e.notes}` : ""}</div>
                       {isSplit && (
-                        <div style={{ fontSize:11, color:"#F97316", marginTop:2 }}>Split · your share ${share.toFixed(2)} of ${amt.toFixed(2)}</div>
+                        <div style={{ fontSize:11, color:"#F97316", marginTop:2 }}>Your share ${share.toFixed(2)} of ${amt.toFixed(2)}</div>
                       )}
                     </div>
                     <div style={{ fontSize:14, fontWeight:600, textAlign:"right" }}>
