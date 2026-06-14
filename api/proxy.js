@@ -38,10 +38,13 @@ export default async function handler(req, res) {
       const shareParsed = parseFloat(String(rawShare).replace(/[^0-9.]/g, ""));
       const personalShare = isNaN(shareParsed) || shareParsed <= 0 ? amount : shareParsed;
 
+      const splitLabel = String(row.split || row["split"] || "Self");
+
       return {
         date,
         amount,
         personalShare,
+        splitLabel,
         category: String(row.category || row["category"] || "Other"),
         card:     String(row.card     || row["card"]     || ""),
         notes:    String(row.notes    || row["notes"]    || ""),
